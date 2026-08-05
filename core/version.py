@@ -1,0 +1,3 @@
+VERSION = "1.0.0"
+BUILD = "001"
+APP_NAME = "GlavRyba AI"

@@ -1,0 +1,6 @@
+DIRECTOR = "director"
+ADMIN = "admin"
+MANAGER = "manager"
+CHEF = "chef"
+CASHIER = "cashier"
+ACCOUNTANT = "accountant"
