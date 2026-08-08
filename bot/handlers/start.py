@@ -6,29 +6,57 @@ from bot.keyboards.menu import get_main_menu
 from bot.keyboards.admin import admin_menu
 from bot.services.auth_service import AuthService
 
+
 router = Router()
 
 
 @router.message(CommandStart())
-async def start_handler(message: Message, db):
+async def start_handler(
+    message: Message,
+    db,
+):
+    """
+    Обработка команды /start.
+
+    Пользователь автоматически регистрируется
+    или обновляет свои данные.
+
+    Директор получает административную панель.
+    Остальные пользователи получают основное меню.
+    """
 
     auth = AuthService(db)
 
-    user = await auth.register(message.from_user)
+    user = await auth.register(
+        message.from_user
+    )
 
-    print("USER =", dict(user))
-    print("ROLE =", user["role"])
+    print(
+        "USER =",
+        dict(user),
+    )
 
+    print(
+        "ROLE =",
+        user["role"],
+    )
+
+    # Директор
     if user["role"] == "director":
 
         await message.answer(
-            "🔥 ДИРЕКТОР TEST 123 🔥",
-            reply_markup=admin_menu()
+            "🔥 ПАНЕЛЬ ДИРЕКТОРА 🔥\n\n"
+            "Добро пожаловать в GlavRyba AI.\n\n"
+            "Выберите необходимый раздел:",
+            reply_markup=admin_menu(),
         )
+
         return
 
+    # Обычный пользователь
     await message.answer(
         "Ассаляму алейкум!\n\n"
-        "Добро пожаловать в GlavRyba AI.",
-        reply_markup=get_main_menu()
+        "Добро пожаловать в GlavRyba AI.\n\n"
+        "Выберите необходимый раздел:",
+        reply_markup=get_main_menu(),
     )
