@@ -9,24 +9,16 @@ from bot.keyboards.users import (
     user_restaurants_keyboard,
     available_restaurants_keyboard,
 )
+
 from bot.keyboards.admin import admin_menu
+
 from bot.services.user_service import UserService
+
+from core.access import check_permission
+from core.permissions import Permission
 
 
 router = Router()
-
-
-async def is_director(db, telegram_id: int) -> bool:
-    role = await db.pool.fetchval(
-        """
-        SELECT role
-        FROM users
-        WHERE telegram_id = $1
-        """,
-        telegram_id,
-    )
-
-    return role == "director"
 
 
 @router.callback_query(F.data == "admin_users")
@@ -34,16 +26,18 @@ async def admin_users(
     callback: CallbackQuery,
     db,
 ):
-    if not await is_director(db, callback.from_user.id):
-        await callback.answer(
-            "⛔ Доступ запрещён",
-            show_alert=True,
-        )
+
+    if not await check_permission(
+        callback,
+        db,
+        Permission.USERS_VIEW,
+    ):
         return
 
     await callback.message.edit_text(
         "👥 ПОЛЬЗОВАТЕЛИ\n\n"
-        "Управление пользователями и ролями GlavRyba AI.",
+        "Управление пользователями "
+        "GlavRyba AI.",
         reply_markup=users_menu(),
     )
 
@@ -55,11 +49,12 @@ async def users_list(
     callback: CallbackQuery,
     db,
 ):
-    if not await is_director(db, callback.from_user.id):
-        await callback.answer(
-            "⛔ Доступ запрещён",
-            show_alert=True,
-        )
+
+    if not await check_permission(
+        callback,
+        db,
+        Permission.USERS_VIEW,
+    ):
         return
 
     service = UserService(db)
@@ -72,6 +67,7 @@ async def users_list(
             "Пользователей пока нет.",
             reply_markup=users_menu(),
         )
+
         await callback.answer()
         return
 
@@ -89,11 +85,12 @@ async def user_view(
     callback: CallbackQuery,
     db,
 ):
-    if not await is_director(db, callback.from_user.id):
-        await callback.answer(
-            "⛔ Доступ запрещён",
-            show_alert=True,
-        )
+
+    if not await check_permission(
+        callback,
+        db,
+        Permission.USERS_VIEW,
+    ):
         return
 
     user_id = int(
@@ -106,13 +103,20 @@ async def user_view(
 
     if not user:
         await callback.answer(
-            "Пользователь не найден",
+            "Пользователь не найден.",
             show_alert=True,
         )
         return
 
-    role = user["role"] or "user"
-    username = user["username"] or "не указан"
+    username = (
+        user["username"]
+        or "не указан"
+    )
+
+    role = (
+        user["role"]
+        or "user"
+    )
 
     text = (
         "👤 ПОЛЬЗОВАТЕЛЬ\n\n"
@@ -127,7 +131,9 @@ async def user_view(
 
     await callback.message.edit_text(
         text,
-        reply_markup=user_actions(user["id"]),
+        reply_markup=user_actions(
+            user["id"]
+        ),
     )
 
     await callback.answer()
@@ -138,11 +144,12 @@ async def user_role(
     callback: CallbackQuery,
     db,
 ):
-    if not await is_director(db, callback.from_user.id):
-        await callback.answer(
-            "⛔ Доступ запрещён",
-            show_alert=True,
-        )
+
+    if not await check_permission(
+        callback,
+        db,
+        Permission.ROLES_EDIT,
+    ):
         return
 
     user_id = int(
@@ -151,11 +158,13 @@ async def user_role(
 
     service = UserService(db)
 
-    user = await service.get_user(user_id)
+    user = await service.get_user(
+        user_id
+    )
 
     if not user:
         await callback.answer(
-            "Пользователь не найден",
+            "Пользователь не найден.",
             show_alert=True,
         )
         return
@@ -176,16 +185,19 @@ async def user_role(
     await callback.answer()
 
 
-@router.callback_query(F.data.startswith("user_set_role:"))
+@router.callback_query(
+    F.data.startswith("user_set_role:")
+)
 async def user_set_role(
     callback: CallbackQuery,
     db,
 ):
-    if not await is_director(db, callback.from_user.id):
-        await callback.answer(
-            "⛔ Доступ запрещён",
-            show_alert=True,
-        )
+
+    if not await check_permission(
+        callback,
+        db,
+        Permission.ROLES_EDIT,
+    ):
         return
 
     parts = callback.data.split(":")
@@ -195,52 +207,60 @@ async def user_set_role(
 
     service = UserService(db)
 
-    target_user = await service.get_user(user_id)
+    target_user = await service.get_user(
+        user_id
+    )
 
     if not target_user:
         await callback.answer(
-            "Пользователь не найден",
+            "Пользователь не найден.",
             show_alert=True,
         )
         return
 
     current_user = await db.pool.fetchrow(
         """
-        SELECT
-            id,
-            role
+        SELECT id, role
         FROM users
         WHERE telegram_id = $1
         """,
         callback.from_user.id,
     )
 
+    # Защита самого директора
     if (
         current_user["id"] == user_id
         and new_role != "director"
     ):
         await callback.answer(
-            "⛔ Нельзя снять роль director с самого себя.",
+            "⛔ Нельзя снять роль director "
+            "с самого себя.",
             show_alert=True,
         )
         return
 
     try:
+
         updated_user = await service.set_role(
             user_id,
             new_role,
         )
+
     except ValueError as error:
+
         await callback.answer(
             str(error),
             show_alert=True,
         )
+
         return
 
     await callback.message.edit_text(
         "✅ РОЛЬ ИЗМЕНЕНА\n\n"
-        f"Пользователь: {updated_user['full_name']}\n"
-        f"Новая роль: 🎭 {updated_user['role']}",
+        f"Пользователь: "
+        f"{updated_user['full_name']}\n"
+        f"Новая роль: 🎭 "
+        f"{updated_user['role']}",
         reply_markup=user_actions(
             updated_user["id"]
         ),
@@ -251,16 +271,19 @@ async def user_set_role(
     )
 
 
-@router.callback_query(F.data.startswith("user_restaurants:"))
+@router.callback_query(
+    F.data.startswith("user_restaurants:")
+)
 async def user_restaurants(
     callback: CallbackQuery,
     db,
 ):
-    if not await is_director(db, callback.from_user.id):
-        await callback.answer(
-            "⛔ Доступ запрещён",
-            show_alert=True,
-        )
+
+    if not await check_permission(
+        callback,
+        db,
+        Permission.RESTAURANTS_VIEW,
+    ):
         return
 
     user_id = int(
@@ -269,42 +292,33 @@ async def user_restaurants(
 
     service = UserService(db)
 
-    user = await service.get_user(user_id)
+    user = await service.get_user(
+        user_id
+    )
 
     if not user:
         await callback.answer(
-            "Пользователь не найден",
+            "Пользователь не найден.",
             show_alert=True,
         )
         return
 
-    restaurants = await service.get_user_restaurants(
-        user_id
+    restaurants = (
+        await service.get_user_restaurants(
+            user_id
+        )
     )
 
     if restaurants:
-        lines = [
-            "🏢 РЕСТОРАНЫ ПОЛЬЗОВАТЕЛЯ",
-            "",
-            f"👤 {user['full_name']}",
-            "",
-            "Назначенные рестораны:",
-        ]
 
-        for restaurant in restaurants:
-            status = (
-                "🟢"
-                if restaurant["active"]
-                else "🔴"
-            )
-
-            lines.append(
-                f"{status} {restaurant['name']}"
-            )
-
-        text = "\n".join(lines)
+        text = (
+            "🏢 РЕСТОРАНЫ ПОЛЬЗОВАТЕЛЯ\n\n"
+            f"👤 {user['full_name']}\n\n"
+            "Назначенные рестораны:"
+        )
 
     else:
+
         text = (
             "🏢 РЕСТОРАНЫ ПОЛЬЗОВАТЕЛЯ\n\n"
             f"👤 {user['full_name']}\n\n"
@@ -329,11 +343,12 @@ async def user_add_restaurant(
     callback: CallbackQuery,
     db,
 ):
-    if not await is_director(db, callback.from_user.id):
-        await callback.answer(
-            "⛔ Доступ запрещён",
-            show_alert=True,
-        )
+
+    if not await check_permission(
+        callback,
+        db,
+        Permission.RESTAURANTS_EDIT,
+    ):
         return
 
     user_id = int(
@@ -342,11 +357,13 @@ async def user_add_restaurant(
 
     service = UserService(db)
 
-    user = await service.get_user(user_id)
+    user = await service.get_user(
+        user_id
+    )
 
     if not user:
         await callback.answer(
-            "Пользователь не найден",
+            "Пользователь не найден.",
             show_alert=True,
         )
         return
@@ -358,10 +375,12 @@ async def user_add_restaurant(
     )
 
     if not restaurants:
+
         await callback.answer(
             "Все рестораны уже назначены.",
             show_alert=True,
         )
+
         return
 
     await callback.message.edit_text(
@@ -384,11 +403,12 @@ async def user_assign_restaurant(
     callback: CallbackQuery,
     db,
 ):
-    if not await is_director(db, callback.from_user.id):
-        await callback.answer(
-            "⛔ Доступ запрещён",
-            show_alert=True,
-        )
+
+    if not await check_permission(
+        callback,
+        db,
+        Permission.RESTAURANTS_EDIT,
+    ):
         return
 
     parts = callback.data.split(":")
@@ -399,19 +419,25 @@ async def user_assign_restaurant(
     service = UserService(db)
 
     try:
+
         await service.assign_restaurant(
             user_id,
             restaurant_id,
         )
+
     except ValueError as error:
+
         await callback.answer(
             str(error),
             show_alert=True,
         )
+
         return
 
-    restaurants = await service.get_user_restaurants(
-        user_id
+    restaurants = (
+        await service.get_user_restaurants(
+            user_id
+        )
     )
 
     await callback.message.edit_text(
@@ -435,11 +461,12 @@ async def user_remove_restaurant(
     callback: CallbackQuery,
     db,
 ):
-    if not await is_director(db, callback.from_user.id):
-        await callback.answer(
-            "⛔ Доступ запрещён",
-            show_alert=True,
-        )
+
+    if not await check_permission(
+        callback,
+        db,
+        Permission.RESTAURANTS_EDIT,
+    ):
         return
 
     parts = callback.data.split(":")
@@ -454,13 +481,15 @@ async def user_remove_restaurant(
         restaurant_id,
     )
 
-    restaurants = await service.get_user_restaurants(
-        user_id
+    restaurants = (
+        await service.get_user_restaurants(
+            user_id
+        )
     )
 
     await callback.message.edit_text(
         "🏢 РЕСТОРАНЫ ПОЛЬЗОВАТЕЛЯ\n\n"
-        "Ресторан удалён из привязки.",
+        "Ресторан убран из привязки.",
         reply_markup=user_restaurants_keyboard(
             user_id,
             restaurants,
@@ -477,11 +506,12 @@ async def admin_menu_callback(
     callback: CallbackQuery,
     db,
 ):
-    if not await is_director(db, callback.from_user.id):
-        await callback.answer(
-            "⛔ Доступ запрещён",
-            show_alert=True,
-        )
+
+    if not await check_permission(
+        callback,
+        db,
+        Permission.USERS_VIEW,
+    ):
         return
 
     await callback.message.edit_text(
