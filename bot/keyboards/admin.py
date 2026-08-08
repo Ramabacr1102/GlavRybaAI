@@ -25,6 +25,12 @@ def admin_menu():
             ],
             [
                 InlineKeyboardButton(
+                    text="📦 Склад",
+                    callback_data="warehouse",
+                )
+            ],
+            [
+                InlineKeyboardButton(
                     text="📊 Статистика",
                     callback_data="admin_stats",
                 )
